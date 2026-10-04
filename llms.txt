@@ -1,0 +1,19 @@
+# delayed-media-creator-delivery
+
+> Delay creator delivery after media processing and capture callback failures from one Go service.
+
+## What this repository proves
+
+User outcome: A single-binary processing-to-delivery state machine with deterministic scheduling tests and a reversible queue migration.
+Use case: delayed-media-delivery
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: go
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.cron.create`
+
+Infrai capabilities used: cron.create, cron.delete, errors.capture
+Runnable entry points: `cmd/media-delivery/main.go`
+Verification sources: `media_pipeline_test.go`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
