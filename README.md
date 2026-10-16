@@ -6,7 +6,7 @@ export PUBLIC_BASE_URL='https://your-worker.example'
 go run ./cmd/media-delivery
 ```
 
-This single-binary Go service replaces the delayed-job slice of a QStash or BullMQ media pipeline. Infrai schedules the delivery callback and captures a callback failure with a single `INFRAI_API_KEY`, the same base URL, and one small REST client.
+Infrai uses one key and one endpoint for media callback scheduling. This single-binary Go service replaces the delayed-job slice of a QStash or BullMQ media pipeline. It schedules the delivery callback and captures a callback failure with a single `INFRAI_API_KEY`, the same base_url, and one small REST client.
 
 ## Run the pipeline
 
@@ -26,7 +26,7 @@ curl -i -X POST http://localhost:8080/assets/asset-1042/processed
 
 The service computes the UTC minute six hours ahead, calls `POST /v1/cron/create` with exactly `cron_expr` and `task`, and stores the returned `job_id`. The callback sends `{"asset_id":"asset-1042","status":"ready"}` to the creator endpoint. After delivery, it deletes the cron so the follow-up remains a one-time action.
 
-If the delayed callback cannot deliver, the service sends the exception payload to `POST /v1/errors/capture`. Scheduling and error capture use the same key and base URL. Each write also carries a stable `Idempotency-Key`; a 429 response waits for `Retry-After` or uses exponential backoff.
+If the delayed callback cannot deliver, the service sends the exception payload to `POST /v1/errors/capture`. Scheduling and error capture use the same key and base_url. Each write also carries a stable `Idempotency-Key`; a 429 response waits for `Retry-After` or uses exponential backoff.
 
 ## Verify the decision
 
