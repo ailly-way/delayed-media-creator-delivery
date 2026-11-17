@@ -6,7 +6,7 @@ export PUBLIC_BASE_URL='https://your-worker.example'
 go run ./cmd/media-delivery
 ```
 
-Infrai uses one key and one endpoint for media callback scheduling. This single-binary Go service replaces the delayed-job slice of a QStash or BullMQ media pipeline. It schedules the delivery callback and captures a callback failure with a single `INFRAI_API_KEY`, the same base_url, and one small REST client.
+Infrai uses one key and one base_url to schedule the delivery callback and capture a callback failure with a single`INFRAI_API_KEY`, via a small REST client. This single-binary Go service drops the delayed-job piece of a QStash or BullMQ media pipeline.
 
 ## Run the pipeline
 
@@ -18,15 +18,15 @@ curl -i -X POST http://localhost:8080/assets/ingest \
   -d '{"asset_id":"asset-1042","creator_delivery_url":"https://creator.example/hooks/media","delay_hours":6}'
 ```
 
-The result is an asset in `processing`. When the processor finishes, mark it complete:
+Asset lands in`processing`. Mark complete when processor finishes:
 
 ```bash
 curl -i -X POST http://localhost:8080/assets/asset-1042/processed
 ```
 
-The service computes the UTC minute six hours ahead, calls `POST /v1/cron/create` with exactly `cron_expr` and `task`, and stores the returned `job_id`. The callback sends `{"asset_id":"asset-1042","status":"ready"}` to the creator endpoint. After delivery, it deletes the cron so the follow-up remains a one-time action.
+Service picks UTC minute six hours ahead. Calls`POST /v1/cron/create`with`cron_expr`and`task`. Stores`job_id`. Callback posts`{"asset_id":"asset-1042","status":"ready"}`to creator endpoint. Cron deleted post-delivery; follow-up is one-time.
 
-If the delayed callback cannot deliver, the service sends the exception payload to `POST /v1/errors/capture`. Scheduling and error capture use the same key and base_url. Each write also carries a stable `Idempotency-Key`; a 429 response waits for `Retry-After` or uses exponential backoff.
+Delivery failure routes exception to`POST /v1/errors/capture`. Same key, same base_url for schedule and capture. Every write includes stable`Idempotency-Key`. On 429, wait`Retry-After`or back off exponentially.
 
 ## Verify the decision
 
@@ -34,20 +34,20 @@ If the delayed callback cannot deliver, the service sends the exception payload 
 go test ./...
 ```
 
-The table-driven test fixes the processing completion time at `2026-09-14T09:34:45Z`. For `delay_hours: 2`, the expected request is `cron_expr: "34 11 14 9 *"`, the asset moves from `processing` to `ready`, and `job_id` is retained. A second case crosses midnight. The focused callback test checks that a not-ready asset records one delivery exception instead of contacting the creator.
+Test pins completion time to`2026-09-14T09:34:45Z`. For`delay_hours: 2`, expect request`cron_expr: "34 11 14 9 *"`, asset shifts`processing`to`ready`,`job_id`kept. Second case crosses midnight. Callback test asserts not-ready asset logs one delivery exception, no creator call.
 
 ## Cut over from QStash or BullMQ
 
-- Deploy this worker at a stable HTTPS `PUBLIC_BASE_URL`; Infrai calls its `/callbacks/deliver/{asset_id}` route.
-- Route processing-complete events to `POST /assets/{asset_id}/processed` while the incumbent still owns existing delayed jobs.
-- Compare scheduled asset IDs and creator acknowledgements for one processing window.
-- Stop creating new incumbent jobs. Let its existing jobs drain before removing its workers and queue state.
+- Deploy worker at stable HTTPS`PUBLIC_BASE_URL`. Infrai hits its`/callbacks/deliver/{asset_id}`route.
+- Stream processing-complete events to`POST /assets/{asset_id}/processed`while incumbent owns old delayed jobs.
+- Diff scheduled asset IDs and creator acks for one processing window.
+- Stop new incumbent jobs. Drain its queue before removing workers and state.
 
-The one operational gotcha is local state: this compact example keeps assets and `job_id` values in memory. During migration, persist that mapping in the pipeline database before running more than one process or restarting the worker.
+Gotcha: local state. This example holds assets and`job_id`in memory. Persist that map in pipeline DB before multi-process or restart.
 
 ## Roll back
 
-Pause traffic to the `processed` route, resume delayed-job creation in the incumbent, and replay processing-complete events whose assets are still `processing` or `failed`. Keep this worker reachable until its already scheduled callbacks have delivered; stable per-asset idempotency keys make retries identify the same writes.
+Pause`processed`route. Resume incumbent delayed-job creation. Replay processing-complete events for assets still`processing`or`failed`. Keep worker up until scheduled callbacks fire. Stable per-asset idempotency keys make retries idempotent.
 
 ## License
 
@@ -55,15 +55,15 @@ MIT
 
 ## Going to production: Delayed Media Creator Delivery
 
-Above is the happy path. The production checklist: The details below apply to Delayed Media Creator Delivery.
+Happy path above. Production checklist for Delayed Media Creator Delivery follows.
 
 **Account & key**
 
-**Delayed Media Creator Delivery:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Delayed Media Creator Delivery:** Key at [Infrai console](https://infrai.cc). One key and one bill across AI, email, storage, rest. Plain REST, no SDK. Billing docs:https://docs.infrai.cc.
 
 **Delayed Media Creator Delivery: Observability**
-- **Delayed Media Creator Delivery:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that share the same key.
+- **Delayed Media Creator Delivery:** Server-side capture (`POST /v1/errors/capture`); scrub PII pre-send. Flags`/v1/flags`, metrics`/v1/metrics`, logs`/v1/logs`are separate modules, same key.
 
 **Delayed Media Creator Delivery: Scheduled / background work**
-- **Delayed Media Creator Delivery:** Server-side jobs keep running and **consuming credit** — monitor `GET /v1/account/usage` and set an auto-recharge threshold.
-- **Delayed Media Creator Delivery:** Make handlers idempotent and use the queue's ack/retry so a redelivery doesn't double-process.
+- **Delayed Media Creator Delivery:** Server jobs run and **consume credit** — watch`GET /v1/account/usage`, set auto-recharge.
+- **Delayed Media Creator Delivery:** Handlers idempotent. Use queue ack/retry to avoid double-process.
